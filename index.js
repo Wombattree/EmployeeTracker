@@ -33,7 +33,7 @@ function PickFromMainOptions()
         message: `What would you like to do?`,
         choices: ["View all departments", "View all roles", "View all employees", new inquirer.Separator(), 
                   "Add a department", "Add a role", "Add an employee", new inquirer.Separator(), 
-                  "Update an employee role"],
+                  "Update an employee role", new inquirer.Separator()],
         name: 'optionChosen',
     }]).then((response) =>
     {
@@ -51,25 +51,12 @@ function PickFromMainOptions()
     });
 }
 
-// function GetAllDepartmentNames()
-// {
-//     db.query(`SELECT * FROM department`, (error, result) => 
-//     {
-//         if (error) { console.log("Error"); return; }
-//         const names = [];
-//         for (let i = 0; i < result.length; i++) names.push(result[i].name);
-//         return names;
-//     });
-// }
-
-// GetAllDepartmentNames();
-
 function DisplayAllDepartments()
 {
     db.query(`SELECT * FROM department`, (error, result) => 
     {
         if (error) { console.log("Error"); return; }
-        console.log("\n---------------------");
+        console.log("\n------------------------------------------");
         console.table(result);
         PickFromMainOptions();
     });
@@ -77,10 +64,12 @@ function DisplayAllDepartments()
 
 function DisplayAllRoles()
 {
-    db.query(`SELECT * FROM role`, (error, result) => 
+    const sql = `SELECT role.id AS ID, role.title AS Title, role.salary AS Salary, department.name AS Department FROM role 
+                LEFT JOIN department ON department.id = role.department_id`;
+    db.query(sql, (error, result) => 
     {
         if (error) { console.log("Error"); return; }
-        console.log("\n---------------------");
+        console.log("\n------------------------------------------");
         console.table(result);
         PickFromMainOptions();
     });
@@ -88,10 +77,12 @@ function DisplayAllRoles()
 
 function DisplayAllEmployees()
 {
-    db.query(`SELECT * FROM employee`, (error, result) => 
+    const sql = `SELECT employee.id AS ID, employee.first_name AS First_Name, employee.last_name AS Last_Name, department.name AS Department, role.title AS Title, role.salary AS Salary, employee.manager_id AS Manager_ID FROM employee 
+    JOIN role ON role.id = employee.role_id JOIN department ON role.department_id = department.id`;
+    db.query(sql, (error, result) => 
     {
         if (error) { console.log("Error"); return; }
-        console.log("\n---------------------");
+        console.log("\n------------------------------------------");
         console.table(result);
         PickFromMainOptions();
     });
@@ -122,14 +113,52 @@ function AddADepartment()
     });
 }
 
-function AddARole()
+
+function GetAllDepartmentNames()
 {
-    const departmentNames = [];
-    db.query(`SELECT * FROM department`, (error, result) => 
+    return new Promise((resolve, reject) =>
     {
-        if (error) { console.log("Error"); return; }
-        for (let i = 0; i < result.length; i++) departmentNames.push(result[i].name);
+        db.query(`SELECT * FROM department`,  (error, result) =>
+        {
+            if(error) return reject(error);
+            const departmentNames = [];
+            for (let i = 0; i < result.length; i++) departmentNames.push(`${result[i].name}`);
+            return resolve(departmentNames);
+        });
     });
+}
+
+function GetAllEmployeeNames()
+{
+    return new Promise((resolve, reject) =>
+    {
+        db.query(`SELECT first_name, last_name FROM employee`,  (error, result) =>
+        {
+            if(error) return reject(error);
+            const employeeNames = [];
+            for (let i = 0; i < result.length; i++) employeeNames.push(`${result[i].first_name} ${result[i].last_name}`);
+            return resolve(employeeNames);
+        });
+    });
+}
+
+function GetAllRoleNames()
+{
+    return new Promise((resolve, reject) =>
+    {
+        db.query(`SELECT title FROM role`,  (error, result) =>
+        {
+            if(error) return reject(error);
+            const roleNames = [];
+            for (let i = 0; i < result.length; i++) roleNames.push(`${result[i].title}`);
+            return resolve(roleNames);
+        });
+    });
+}
+
+async function AddARole()
+{
+    const departmentNames = await GetAllDepartmentNames();
 
     inquirer.prompt([
     {
@@ -170,22 +199,10 @@ function AddARole()
     });
 }
 
-function AddAnEmployee()
+async function AddAnEmployee()
 {
-    const roleNames = [];
-    db.query(`SELECT * FROM role`, (error, result) => 
-    {
-        if (error) { console.log("Error"); return; }
-        for (let i = 0; i < result.length; i++) roleNames.push(result[i].title);
-    });
-
-    const employeeNames = [];
-    employeeNames.push("NA");
-    db.query(`SELECT * FROM employee`, (error, result) => 
-    {
-        if (error) { console.log("Error"); return; }
-        for (let i = 0; i < result.length; i++) employeeNames.push(`${result[i].first_name} ${result[i].last_name}`);
-    });
+    const employeeNames = await GetAllEmployeeNames();
+    const roleNames = await GetAllRoleNames();
 
     inquirer.prompt([
     {
@@ -240,25 +257,13 @@ function AddAnEmployee()
     });
 }
 
-function UpdateAnEmployeeRole()
+async function UpdateAnEmployeeRole()
 {
-    const roleNames = [];
-    db.query(`SELECT * FROM role`, (error, result) => 
-    {
-        if (error) { console.log("Error"); return; }
-        for (let i = 0; i < result.length; i++) roleNames.push(result[i].title);
-    });
-
-    const employeeNames = [];
-    employeeNames.push("NA");
-    db.query(`SELECT * FROM employee`, (error, result) => 
-    {
-        if (error) { console.log("Error"); return; }
-        for (let i = 0; i < result.length; i++) employeeNames.push(`${result[i].first_name} ${result[i].last_name}`);
-    });
+    const employeeNames = await GetAllEmployeeNames();
+    const roleNames = await GetAllRoleNames();
 
     inquirer.prompt([
-    { 
+    {
         type: 'list',
         message: `Which employee's role would you like to update?`,
         choices: employeeNames,
@@ -272,12 +277,13 @@ function UpdateAnEmployeeRole()
     }
     ]).then((response) =>
     {
-        const employeeIDSQL = `SELECT id FROM employee WHERE name = "${response.name}"`
+        const employeeNameSplit = response.name.split(" ");
+        const employeeIDSQL = `SELECT id FROM employee WHERE first_name = "${employeeNameSplit[0]}" AND last_name = "${employeeNameSplit[1]}"`;
         db.query(employeeIDSQL, (error, nameResult) => 
         {
             if (error) { console.log("Error finding name ID"); return; }
 
-            const roleIDSQL = `SELECT id FROM role WHERE title = "role"`
+            const roleIDSQL = `SELECT id FROM role WHERE title = "${response.role}"`;
             db.query(roleIDSQL, (error, roleResult) => 
             {
                 if (error) { console.log("Error finding manager ID"); return; }
@@ -286,35 +292,13 @@ function UpdateAnEmployeeRole()
                 db.query(sql, (error, result) => 
                 {
                     if (error) { console.log("Error adding new employee"); return; }
-                    console.log(`${response.firstName} ${response.lastName}'s details were updated`);
+                    console.log(`${response.name}'s details were updated`);
                     PickFromMainOptions();
                 });
             });
         });
     });
 }
-
-// // BONUS: Update review name
-// app.put('/api/review/:id', (req, res) => {
-//   const sql = `UPDATE reviews SET review = ? WHERE id = ?`;
-//   const params = [req.body.review, req.params.id];
-
-//   db.query(sql, params, (err, result) => {
-//     if (err) {
-//       res.status(400).json({ error: err.message });
-//     } else if (!result.affectedRows) {
-//       res.json({
-//         message: 'Movie not found'
-//       });
-//     } else {
-//       res.json({
-//         message: 'success',
-//         data: req.body,
-//         changes: result.affectedRows
-//       });
-//     }
-//   });
-// });
 
 app.use((req, res) => { res.status(404).end(); });
 app.listen(PORT, () => { console.log(`Server running on port ${PORT}`);});
